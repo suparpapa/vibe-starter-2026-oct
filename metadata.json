@@ -1,0 +1,6 @@
+{
+  "name": "The New York Times",
+  "description": "Authentic New York Times newspaper experience featuring broadsheet front page layout, breaking news coverage, opinion columns, interactive Mini Crossword, Wirecutter reviews, and full article reader.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
