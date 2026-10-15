@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   X,
   Bookmark,
@@ -43,9 +43,9 @@ export const ArticleModal: React.FC<ArticleModalProps> = ({
   // Reading mode state
   const [fontSize, setFontSize] = useState<'normal' | 'large' | 'xlarge'>('normal');
   const [isPlayingAudio, setIsPlayingAudio] = useState(false);
-  const [audioProgress, setAudioProgress] = useState(0);
   const [audioSpeed, setAudioSpeed] = useState<'1x' | '1.25x' | '1.5x'>('1x');
   const [copiedLink, setCopiedLink] = useState(false);
+  const [readingProgress, setReadingProgress] = useState(0);
 
   // Comments state
   const [showComments, setShowComments] = useState(false);
@@ -54,19 +54,65 @@ export const ArticleModal: React.FC<ArticleModalProps> = ({
   const [commentText, setCommentText] = useState('');
 
   // Recipe scaling state (if cooking)
-  const [recipeServings, setRecipeServings] = useState(
-    article.recipeDetails?.servings || 4
-  );
+  const defaultServings = article.recipeDetails?.servings || 4;
+  const [recipeServings, setRecipeServings] = useState(defaultServings);
   const [checkedIngredients, setCheckedIngredients] = useState<Record<number, boolean>>({});
+
+  // Speech synthesis audio narration
+  useEffect(() => {
+    return () => {
+      if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+      }
+    };
+  }, [article.id]);
+
+  const handleAudioToggle = () => {
+    if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
+      setIsPlayingAudio(!isPlayingAudio);
+      return;
+    }
+
+    if (isPlayingAudio) {
+      window.speechSynthesis.pause();
+      setIsPlayingAudio(false);
+    } else {
+      if (window.speechSynthesis.paused) {
+        window.speechSynthesis.resume();
+        setIsPlayingAudio(true);
+      } else {
+        window.speechSynthesis.cancel();
+        const textToRead = `${article.title}. By ${article.byline}. ${article.summary}. ${article.content.slice(0, 3).join(' ')}`;
+        const utterance = new SpeechSynthesisUtterance(textToRead);
+        const rate = audioSpeed === '1x' ? 1 : audioSpeed === '1.25x' ? 1.25 : 1.5;
+        utterance.rate = rate;
+        utterance.onend = () => setIsPlayingAudio(false);
+        utterance.onerror = () => setIsPlayingAudio(false);
+        window.speechSynthesis.speak(utterance);
+        setIsPlayingAudio(true);
+      }
+    }
+  };
+
+  const handleSpeedChange = () => {
+    const speeds: ('1x' | '1.25x' | '1.5x')[] = ['1x', '1.25x', '1.5x'];
+    const next = speeds[(speeds.indexOf(audioSpeed) + 1) % speeds.length];
+    setAudioSpeed(next);
+    if (isPlayingAudio && typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+      const textToRead = `${article.title}. ${article.summary}. ${article.content.slice(0, 3).join(' ')}`;
+      const utterance = new SpeechSynthesisUtterance(textToRead);
+      utterance.rate = next === '1x' ? 1 : next === '1.25x' ? 1.25 : 1.5;
+      utterance.onend = () => setIsPlayingAudio(false);
+      utterance.onerror = () => setIsPlayingAudio(false);
+      window.speechSynthesis.speak(utterance);
+    }
+  };
 
   const handleCopyLink = () => {
     navigator.clipboard?.writeText(window.location.href);
     setCopiedLink(true);
     setTimeout(() => setCopiedLink(false), 2500);
-  };
-
-  const handleAudioToggle = () => {
-    setIsPlayingAudio(!isPlayingAudio);
   };
 
   const handleCommentSubmit = (e: React.FormEvent) => {
@@ -81,6 +127,12 @@ export const ArticleModal: React.FC<ArticleModalProps> = ({
     setCommentText('');
   };
 
+  const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;
+    const progress = Math.min(100, Math.max(0, (scrollTop / (scrollHeight - clientHeight)) * 100));
+    setReadingProgress(progress);
+  };
+
   const fontSizeClass = {
     normal: 'text-lg leading-relaxed',
     large: 'text-xl leading-relaxed',
@@ -91,9 +143,16 @@ export const ArticleModal: React.FC<ArticleModalProps> = ({
     <div
       role="dialog"
       aria-modal="true"
+      onScroll={handleScroll}
       className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs overflow-y-auto flex justify-center p-2 sm:p-4 md:p-6"
     >
-      <div className="bg-white text-[#121212] w-full max-w-[860px] rounded-sm shadow-2xl relative my-auto min-h-[90vh] flex flex-col animate-in fade-in zoom-in-95 duration-200">
+      <div className="bg-white text-[#121212] w-full max-w-[860px] rounded-sm shadow-2xl relative my-auto min-h-[90vh] flex flex-col animate-in fade-in zoom-in-95 duration-200 overflow-hidden">
+        {/* Reading progress bar */}
+        <div
+          className="absolute top-0 left-0 h-[3px] bg-[#326891] transition-all duration-150 z-40"
+          style={{ width: `${readingProgress}%` }}
+        />
+
         {/* Sticky Utility Bar */}
         <div className="sticky top-0 z-30 bg-white/95 backdrop-blur-sm border-b border-gray-200 px-4 sm:px-6 py-2.5 flex items-center justify-between">
           <div className="flex items-center space-x-2 sm:space-x-3 text-xs font-sans">
@@ -116,21 +175,21 @@ export const ArticleModal: React.FC<ArticleModalProps> = ({
               <span className="text-[10px] uppercase font-bold text-gray-400 mr-1">Text:</span>
               <button
                 onClick={() => setFontSize('normal')}
-                className={`px-1 rounded ${fontSize === 'normal' ? 'bg-gray-200 font-bold' : ''}`}
+                className={`px-1.5 py-0.5 rounded cursor-pointer ${fontSize === 'normal' ? 'bg-gray-200 font-bold' : ''}`}
                 title="Default text"
               >
                 A
               </button>
               <button
                 onClick={() => setFontSize('large')}
-                className={`px-1 rounded text-sm ${fontSize === 'large' ? 'bg-gray-200 font-bold' : ''}`}
+                className={`px-1.5 py-0.5 rounded text-sm cursor-pointer ${fontSize === 'large' ? 'bg-gray-200 font-bold' : ''}`}
                 title="Larger text"
               >
                 A+
               </button>
               <button
                 onClick={() => setFontSize('xlarge')}
-                className={`px-1 rounded text-base ${fontSize === 'xlarge' ? 'bg-gray-200 font-bold' : ''}`}
+                className={`px-1.5 py-0.5 rounded text-base cursor-pointer ${fontSize === 'xlarge' ? 'bg-gray-200 font-bold' : ''}`}
                 title="Extra large text"
               >
                 A++
@@ -188,7 +247,8 @@ export const ArticleModal: React.FC<ArticleModalProps> = ({
           <div className="flex items-center space-x-3">
             <button
               onClick={handleAudioToggle}
-              className="w-7 h-7 rounded-full bg-[#121212] hover:bg-gray-800 text-white flex items-center justify-center transition cursor-pointer"
+              className="w-7 h-7 rounded-full bg-[#121212] hover:bg-gray-800 text-white flex items-center justify-center transition cursor-pointer active:scale-95 shadow-xs"
+              title={isPlayingAudio ? 'Pause reading aloud' : 'Listen to article narrated'}
             >
               {isPlayingAudio ? (
                 <Pause className="w-3.5 h-3.5 fill-current" />
@@ -198,20 +258,19 @@ export const ArticleModal: React.FC<ArticleModalProps> = ({
             </button>
             <div className="flex flex-col">
               <span className="font-semibold text-gray-900">
-                {isPlayingAudio ? 'Playing narration...' : 'Listen to this article'}
+                {isPlayingAudio ? 'Narration in progress...' : 'Listen to this article'}
               </span>
-              <span className="text-[11px] text-gray-500">Narrated by NYT Audio • 5:12 min</span>
+              <span className="text-[11px] text-gray-500">
+                {isPlayingAudio ? 'Audio synthesized · Live reader' : 'Narrated by NYT Audio · 5:12 min'}
+              </span>
             </div>
           </div>
 
           <div className="flex items-center space-x-3">
             <button
-              onClick={() => {
-                const speeds: ('1x' | '1.25x' | '1.5x')[] = ['1x', '1.25x', '1.5x'];
-                const next = speeds[(speeds.indexOf(audioSpeed) + 1) % speeds.length];
-                setAudioSpeed(next);
-              }}
-              className="px-2 py-0.5 text-[11px] font-bold border border-gray-300 rounded hover:bg-gray-200 cursor-pointer"
+              onClick={handleSpeedChange}
+              className="px-2 py-0.5 text-[11px] font-bold border border-gray-300 rounded hover:bg-gray-200 cursor-pointer font-mono"
+              title="Change reading speed"
             >
               {audioSpeed}
             </button>
@@ -286,7 +345,7 @@ export const ArticleModal: React.FC<ArticleModalProps> = ({
 
           {/* Bulleted Points */}
           {article.bullets && article.bullets.length > 0 && (
-            <div className="bg-[#fcfcfc] border-l-4 border-red-700 p-4 mb-6 rounded-r-xs">
+            <div className="bg-[#fafafa] border border-gray-200 p-4 mb-6 rounded-xs">
               <h4 className="font-sans font-bold text-xs uppercase tracking-wider text-red-700 mb-2">
                 Key Developments
               </h4>
@@ -428,7 +487,7 @@ export const ArticleModal: React.FC<ArticleModalProps> = ({
 
           {/* Pull Quote */}
           {article.pullQuote && (
-            <blockquote className="my-8 pl-5 border-l-2 border-[#121212] italic font-serif text-xl sm:text-2xl text-gray-800">
+            <blockquote className="my-8 py-5 border-t border-b border-gray-200 text-center italic font-serif text-xl sm:text-2xl text-gray-900 leading-snug">
               “{article.pullQuote}”
             </blockquote>
           )}

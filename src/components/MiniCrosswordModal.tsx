@@ -1,8 +1,60 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Play, RotateCcw, CheckCircle2, HelpCircle, Trophy, Eye } from 'lucide-react';
+import { X, Play, RotateCcw, CheckCircle2, HelpCircle, Trophy, Eye, Volume2, VolumeX } from 'lucide-react';
 
 interface MiniCrosswordModalProps {
   onClose: () => void;
+}
+
+function playAcousticFeedback(sound: 'click' | 'victory' | 'error') {
+  try {
+    const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+    if (!AudioCtx) return;
+    const ctx = new AudioCtx();
+    if (sound === 'click') {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(540, ctx.currentTime);
+      gain.gain.setValueAtTime(0.03, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.04);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.04);
+    } else if (sound === 'victory') {
+      [523.25, 659.25, 783.99, 1046.5].forEach((freq, i) => {
+        setTimeout(() => {
+          try {
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.type = 'triangle';
+            osc.frequency.setValueAtTime(freq, ctx.currentTime);
+            gain.gain.setValueAtTime(0.06, ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.3);
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.start();
+            osc.stop(ctx.currentTime + 0.3);
+          } catch {
+            // ignore
+          }
+        }, i * 110);
+      });
+    } else if (sound === 'error') {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(160, ctx.currentTime);
+      gain.gain.setValueAtTime(0.04, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.12);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.12);
+    }
+  } catch {
+    // ignore
+  }
 }
 
 const SOLUTION = [
@@ -42,6 +94,7 @@ export const MiniCrosswordModal: React.FC<MiniCrosswordModalProps> = ({ onClose 
   const [seconds, setSeconds] = useState<number>(0);
   const [isTimerRunning, setIsTimerRunning] = useState<boolean>(true);
   const [isSolved, setIsSolved] = useState<boolean>(false);
+  const [soundEnabled, setSoundEnabled] = useState<boolean>(true);
   const [checkErrors, setCheckErrors] = useState<boolean[][]>(() =>
     Array(5)
       .fill(null)
@@ -77,8 +130,9 @@ export const MiniCrosswordModal: React.FC<MiniCrosswordModalProps> = ({ onClose 
     if (allFilled && allCorrect && !isSolved) {
       setIsSolved(true);
       setIsTimerRunning(false);
+      if (soundEnabled) playAcousticFeedback('victory');
     }
-  }, [grid, isSolved]);
+  }, [grid, isSolved, soundEnabled]);
 
   const handleCellClick = (r: number, c: number) => {
     if (selectedRow === r && selectedCol === c) {
@@ -89,25 +143,62 @@ export const MiniCrosswordModal: React.FC<MiniCrosswordModalProps> = ({ onClose 
     }
   };
 
+  const handleInsertLetter = (char: string) => {
+    if (isSolved) return;
+    const letter = char.toUpperCase();
+    if (soundEnabled) playAcousticFeedback('click');
+    const newGrid = grid.map((row) => [...row]);
+    newGrid[selectedRow][selectedCol] = letter;
+    setGrid(newGrid);
+
+    // Reset check error for this cell
+    const newErrors = checkErrors.map((row) => [...row]);
+    newErrors[selectedRow][selectedCol] = false;
+    setCheckErrors(newErrors);
+
+    // Advance to next cell
+    if (direction === 'across') {
+      if (selectedCol < 4) {
+        setSelectedCol(selectedCol + 1);
+      } else if (selectedRow < 4) {
+        setSelectedRow(selectedRow + 1);
+        setSelectedCol(0);
+      }
+    } else {
+      if (selectedRow < 4) {
+        setSelectedRow(selectedRow + 1);
+      } else if (selectedCol < 4) {
+        setSelectedRow(0);
+        setSelectedCol(selectedCol + 1);
+      }
+    }
+  };
+
+  const handleBackspace = () => {
+    if (isSolved) return;
+    if (soundEnabled) playAcousticFeedback('click');
+    const newGrid = grid.map((row) => [...row]);
+    if (newGrid[selectedRow][selectedCol]) {
+      newGrid[selectedRow][selectedCol] = '';
+    } else {
+      // Move back
+      if (direction === 'across' && selectedCol > 0) {
+        setSelectedCol(selectedCol - 1);
+        newGrid[selectedRow][selectedCol - 1] = '';
+      } else if (direction === 'down' && selectedRow > 0) {
+        setSelectedRow(selectedRow - 1);
+        newGrid[selectedRow - 1][selectedCol] = '';
+      }
+    }
+    setGrid(newGrid);
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (isSolved) return;
 
     if (e.key === 'Backspace') {
       e.preventDefault();
-      const newGrid = grid.map((row) => [...row]);
-      if (newGrid[selectedRow][selectedCol]) {
-        newGrid[selectedRow][selectedCol] = '';
-      } else {
-        // Move back
-        if (direction === 'across' && selectedCol > 0) {
-          setSelectedCol(selectedCol - 1);
-          newGrid[selectedRow][selectedCol - 1] = '';
-        } else if (direction === 'down' && selectedRow > 0) {
-          setSelectedRow(selectedRow - 1);
-          newGrid[selectedRow - 1][selectedCol] = '';
-        }
-      }
-      setGrid(newGrid);
+      handleBackspace();
       return;
     }
 
@@ -134,32 +225,7 @@ export const MiniCrosswordModal: React.FC<MiniCrosswordModalProps> = ({ onClose 
     }
 
     if (/^[a-zA-Z]$/.test(e.key)) {
-      const letter = e.key.toUpperCase();
-      const newGrid = grid.map((row) => [...row]);
-      newGrid[selectedRow][selectedCol] = letter;
-      setGrid(newGrid);
-
-      // Reset check error for this cell
-      const newErrors = checkErrors.map((row) => [...row]);
-      newErrors[selectedRow][selectedCol] = false;
-      setCheckErrors(newErrors);
-
-      // Advance to next cell
-      if (direction === 'across') {
-        if (selectedCol < 4) {
-          setSelectedCol(selectedCol + 1);
-        } else if (selectedRow < 4) {
-          setSelectedRow(selectedRow + 1);
-          setSelectedCol(0);
-        }
-      } else {
-        if (selectedRow < 4) {
-          setSelectedRow(selectedRow + 1);
-        } else if (selectedCol < 4) {
-          setSelectedRow(0);
-          setSelectedCol(selectedCol + 1);
-        }
-      }
+      handleInsertLetter(e.key);
     }
   };
 
@@ -239,6 +305,14 @@ export const MiniCrosswordModal: React.FC<MiniCrosswordModalProps> = ({ onClose 
           </div>
 
           <div className="flex items-center space-x-2">
+            <button
+              onClick={() => setSoundEnabled(!soundEnabled)}
+              className="p-1.5 rounded hover:bg-gray-100 text-gray-600 hover:text-black cursor-pointer"
+              title={soundEnabled ? 'Mute sound effects' : 'Enable sound effects'}
+              aria-label={soundEnabled ? 'Mute sound' : 'Enable sound'}
+            >
+              {soundEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4 text-gray-400" />}
+            </button>
             <button
               onClick={() => setIsTimerRunning(!isTimerRunning)}
               className="text-xs text-gray-600 hover:text-black px-2 py-1 rounded hover:bg-gray-100 cursor-pointer"
@@ -402,6 +476,58 @@ export const MiniCrosswordModal: React.FC<MiniCrosswordModalProps> = ({ onClose 
             </div>
           </div>
         </div>
+
+        {/* On-Screen Virtual Keyboard for Touch & Mouse Play */}
+        {!isSolved && (
+          <div className="bg-[#f0f0f0] border-t border-gray-200 p-2.5 sm:p-3 flex flex-col items-center gap-1.5 select-none font-sans">
+            {/* Row 1 */}
+            <div className="flex gap-1 sm:gap-1.5 justify-center w-full max-w-[500px]">
+              {['Q', 'W', 'E', 'R', 'T', 'Y', 'U', 'I', 'O', 'P'].map((k) => (
+                <button
+                  key={k}
+                  onClick={() => handleInsertLetter(k)}
+                  className="flex-1 min-w-[24px] max-w-[42px] h-9 sm:h-10 bg-white hover:bg-gray-100 active:bg-gray-200 rounded font-semibold text-xs sm:text-sm text-gray-900 shadow-2xs border border-gray-300 transition-colors cursor-pointer flex items-center justify-center"
+                >
+                  {k}
+                </button>
+              ))}
+            </div>
+
+            {/* Row 2 */}
+            <div className="flex gap-1 sm:gap-1.5 justify-center w-full max-w-[460px]">
+              {['A', 'S', 'D', 'F', 'G', 'H', 'J', 'K', 'L'].map((k) => (
+                <button
+                  key={k}
+                  onClick={() => handleInsertLetter(k)}
+                  className="flex-1 min-w-[24px] max-w-[42px] h-9 sm:h-10 bg-white hover:bg-gray-100 active:bg-gray-200 rounded font-semibold text-xs sm:text-sm text-gray-900 shadow-2xs border border-gray-300 transition-colors cursor-pointer flex items-center justify-center"
+                >
+                  {k}
+                </button>
+              ))}
+            </div>
+
+            {/* Row 3 with Backspace */}
+            <div className="flex gap-1 sm:gap-1.5 justify-center w-full max-w-[500px]">
+              {['Z', 'X', 'C', 'V', 'B', 'N', 'M'].map((k) => (
+                <button
+                  key={k}
+                  onClick={() => handleInsertLetter(k)}
+                  className="flex-1 min-w-[24px] max-w-[42px] h-9 sm:h-10 bg-white hover:bg-gray-100 active:bg-gray-200 rounded font-semibold text-xs sm:text-sm text-gray-900 shadow-2xs border border-gray-300 transition-colors cursor-pointer flex items-center justify-center"
+                >
+                  {k}
+                </button>
+              ))}
+              <button
+                onClick={handleBackspace}
+                className="flex-1 min-w-[36px] max-w-[62px] h-9 sm:h-10 bg-gray-200 hover:bg-gray-300 active:bg-gray-400 rounded font-bold text-xs sm:text-sm text-gray-800 shadow-2xs border border-gray-300 transition-colors cursor-pointer flex items-center justify-center"
+                title="Delete letter"
+                aria-label="Delete"
+              >
+                ⌫
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Victory Screen Modal */}
         {isSolved && (

@@ -63,6 +63,21 @@ export default function App() {
     }
   }, [savedArticleIds]);
 
+  // Global keyboard shortcuts (Press / or Cmd+K to search, Esc to close modals)
+  useEffect(() => {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      const activeTag = (e.target as HTMLElement)?.tagName;
+      if (['INPUT', 'TEXTAREA'].includes(activeTag)) return;
+
+      if (e.key === '/' || ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k')) {
+        e.preventDefault();
+        setIsSearchOpen(true);
+      }
+    };
+    window.addEventListener('keydown', handleGlobalKeyDown);
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown);
+  }, []);
+
   const toggleSaveArticle = (id: string) => {
     if (savedArticleIds.includes(id)) {
       setSavedArticleIds((prev) => prev.filter((item) => item !== id));

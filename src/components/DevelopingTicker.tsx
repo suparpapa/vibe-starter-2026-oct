@@ -39,9 +39,8 @@ export const DevelopingTicker: React.FC<DevelopingTickerProps> = ({
 
   return (
     <div className="border-b border-gray-200 pb-2 mb-4 text-xs font-sans flex items-center justify-between">
-      <div className="flex items-center space-x-2 overflow-hidden">
-        <span className="font-bold text-red-700 uppercase tracking-wider text-[10px] flex items-center gap-1 shrink-0">
-          <span className="w-1.5 h-1.5 rounded-full bg-red-600 animate-ping"></span>
+      <div className="flex items-center space-x-2.5 overflow-hidden">
+        <span className="font-bold text-red-700 uppercase tracking-widest text-[10px] shrink-0">
           {current.tag}
         </span>
         <span className="text-gray-300">|</span>
@@ -58,6 +57,7 @@ export const DevelopingTicker: React.FC<DevelopingTickerProps> = ({
           onClick={nextUpdate}
           className="text-gray-400 hover:text-black p-1 text-[11px] rounded transition-colors hidden sm:inline-flex items-center cursor-pointer"
           title="Next update"
+          aria-label="Next news update"
         >
           <ChevronRight className="w-3.5 h-3.5" />
         </button>

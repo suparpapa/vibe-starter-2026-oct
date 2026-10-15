@@ -46,7 +46,7 @@ export const FrontPage: React.FC<FrontPageProps> = ({
           <article className="space-y-2">
             <h2
               onClick={() => onOpenArticle(officialsStory.id)}
-              className="font-serif font-bold text-xl leading-snug tracking-tight text-black hover:text-gray-700 cursor-pointer"
+              className="font-serif font-bold text-xl leading-snug tracking-tight text-black hover:text-gray-700 cursor-pointer [text-wrap:balance]"
             >
               {officialsStory.title}
             </h2>
@@ -56,9 +56,9 @@ export const FrontPage: React.FC<FrontPageProps> = ({
             >
               {officialsStory.summary}
             </p>
-            <div className="text-[11px] font-sans text-gray-500 pt-1 flex items-center space-x-2">
+            <div className="text-[11px] font-sans text-gray-500 pt-1 flex items-center space-x-1.5">
               <span>{officialsStory.byline}</span>
-              <span>•</span>
+              <span aria-hidden="true">·</span>
               <span>{officialsStory.readTime}</span>
             </div>
           </article>
